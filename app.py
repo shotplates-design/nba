@@ -1,5 +1,6 @@
 """Streamlit explorer for the NBA box scores in data/nba_box_scores.json."""
 
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 import pandas as pd
@@ -22,6 +23,21 @@ class Dashboard:
     """Three views over rows produced by BoxScoreLoader."""
 
     @staticmethod
+    def round_tenth(value):
+        """Round half up so 33.25 displays as 33.3 in every view."""
+        if value is None:
+            return None
+        quantized = Decimal(str(float(value))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        return float(quantized)
+
+    @staticmethod
+    def format_average(value):
+        rounded = Dashboard.round_tenth(value)
+        if rounded is None:
+            return "—"
+        return f"{rounded:.1f}"
+
+    @staticmethod
     def format_signed(value):
         if value is None:
             return ""
@@ -35,13 +51,15 @@ class Dashboard:
     def percentage(rate):
         if rate is None:
             return None
-        return round(100.0 * rate, 1)
+        return Dashboard.round_tenth(100.0 * rate)
 
     @staticmethod
     def leaderboard_frame(rows):
         frame = pd.DataFrame(BoxScoreLoader.leaderboard(rows))
         for column in ("FG%", "3P%", "FT%", "PPG", "RPG", "APG", "SPG", "BPG"):
-            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+            frame[column] = pd.to_numeric(frame[column], errors="coerce").map(
+                lambda value: None if pd.isna(value) else Dashboard.round_tenth(value)
+            )
         return frame
 
     @staticmethod
@@ -110,7 +128,7 @@ class Dashboard:
         st.dataframe(
             frame,
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             height=640,
             column_config={
                 "G": st.column_config.NumberColumn(format="%d"),
@@ -140,14 +158,14 @@ class Dashboard:
         metrics = st.columns(9)
         labels = [
             ("G", f"{record['G']}"),
-            ("PPG", f"{record['PPG']:.1f}"),
-            ("RPG", f"{record['RPG']:.1f}"),
-            ("APG", f"{record['APG']:.1f}"),
-            ("SPG", f"{record['SPG']:.1f}"),
-            ("BPG", f"{record['BPG']:.1f}"),
-            ("FG%", "—" if record["FG%"] is None else f"{record['FG%']:.1f}"),
-            ("3P%", "—" if record["3P%"] is None else f"{record['3P%']:.1f}"),
-            ("FT%", "—" if record["FT%"] is None else f"{record['FT%']:.1f}"),
+            ("PPG", Dashboard.format_average(record["PPG"])),
+            ("RPG", Dashboard.format_average(record["RPG"])),
+            ("APG", Dashboard.format_average(record["APG"])),
+            ("SPG", Dashboard.format_average(record["SPG"])),
+            ("BPG", Dashboard.format_average(record["BPG"])),
+            ("FG%", Dashboard.format_average(record["FG%"])),
+            ("3P%", Dashboard.format_average(record["3P%"])),
+            ("FT%", Dashboard.format_average(record["FT%"])),
         ]
         for column, (label, value) in zip(metrics, labels):
             column.metric(label, value)
@@ -169,7 +187,7 @@ class Dashboard:
         st.dataframe(
             Dashboard.game_log_frame(player_rows),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
     @staticmethod
@@ -201,7 +219,7 @@ class Dashboard:
                 st.dataframe(
                     Dashboard.box_frame(side_rows),
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                     column_config={
                         "FG%": st.column_config.NumberColumn(format="%.1f"),
                     },
